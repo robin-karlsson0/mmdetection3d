@@ -548,6 +548,17 @@ class CenterHead(BaseModule):
                     ind[new_idx] = y * feature_map_size[0] + x
                     mask[new_idx] = 1
 
+                    rot = task_boxes[idx][k][6]
+                    box_dim = task_boxes[idx][k][3:6]
+                    if self.norm_bbox:
+                        box_dim = box_dim.log()
+
+                    anno_elems = [
+                        center - torch.tensor([x, y], device=device),
+                        z.unsqueeze(0), box_dim,
+                        torch.sin(rot).unsqueeze(0),
+                        torch.cos(rot).unsqueeze(0)
+                    ]
                     # Assumes datasets with bbox annotations with 9
                     # values have two additional velocity components (vx, vy)
                     # in addition to the standard KITTI-like 7 values
@@ -556,30 +567,9 @@ class CenterHead(BaseModule):
                     # hence incrementing the annotation number by one.
                     if gt_annotation_num == 10:
                         vx, vy = task_boxes[idx][k][7:10]
+                        anno_elems += [vx.unsqueeze(0), vy.unsqueeze(0)]
 
-                    rot = task_boxes[idx][k][6]
-                    box_dim = task_boxes[idx][k][3:6]
-                    if self.norm_bbox:
-                        box_dim = box_dim.log()
-                    if gt_annotation_num == 10:
-                        anno_box[new_idx] = torch.cat([
-                            center - torch.tensor([x, y], device=device),
-                            z.unsqueeze(0), box_dim,
-                            torch.sin(rot).unsqueeze(0),
-                            torch.cos(rot).unsqueeze(0),
-                            vx.unsqueeze(0),
-                            vy.unsqueeze(0)
-                        ])
-                    elif gt_annotation_num == 8:
-                        anno_box[new_idx] = torch.cat([
-                            center - torch.tensor([x, y], device=device),
-                            z.unsqueeze(0), box_dim,
-                            torch.sin(rot).unsqueeze(0),
-                            torch.cos(rot).unsqueeze(0)
-                        ])
-                    else:
-                        raise ValueError(
-                            'Number of GT annotations not implemented')
+                    anno_box[new_idx] = torch.cat(anno_elems)
 
             heatmaps.append(heatmap)
             anno_boxes.append(anno_box)
