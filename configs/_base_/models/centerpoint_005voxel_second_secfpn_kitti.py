@@ -1,4 +1,4 @@
-voxel_size = [0.1, 0.1, 0.2]
+voxel_size = [0.05, 0.05, 0.1]
 model = dict(
     type='CenterPoint',
     pts_voxel_layer=dict(
@@ -8,10 +8,11 @@ model = dict(
         type='SparseEncoder',
         in_channels=4,
         sparse_shape=[41, 1600, 1408],
-        output_channels=128,
+        output_channels=64,
         order=('conv', 'norm', 'act'),
         encoder_channels=((16, 16, 32), (32, 32, 64), (64, 64, 128), (128,
                                                                       128)),
+        encoder_strides=(2, 2, 1, 1),
         encoder_paddings=((0, 0, 1), (0, 0, 1), (0, 0, [0, 1, 1]), (0, 0)),
         block_type='basicblock'),
     pts_backbone=dict(
@@ -45,7 +46,7 @@ model = dict(
             post_center_range=[-10, -50, -10, 80.4, 50, 10],
             max_num=100,
             score_threshold=0.1,
-            out_size_factor=8,
+            out_size_factor=4,
             voxel_size=voxel_size[:2],
             code_size=7,
         ),
@@ -59,7 +60,7 @@ model = dict(
         pts=dict(
             grid_size=[1408, 1600, 40],
             voxel_size=voxel_size,
-            out_size_factor=8,
+            out_size_factor=4,
             dense_reg=1,
             gaussian_overlap=0.1,
             max_objs=500,
