@@ -334,17 +334,20 @@ class CenterHeadWeakSupRP(CenterHead):
             loss_dict[f'task{task_id}.loss_bbox'] = loss_bbox
         return loss_dict
 
-    def get_rps(self, preds_dicts, img_metas, img=None, rescale=False):
-        """Generate region proposals from head predictions.
+    def get_bboxes(self, preds_dicts, img_metas, img=None, rescale=False):
+        """Generate bboxes from bbox head predictions.
 
         Args:
             preds_dicts (tuple[list[dict]]): Prediction results.
+                preds_dicts[task_id][0] --> dict
+                preds_dicts[task_id][0]['reg'] --> torch.Tensor (N,2,H,W)
+                preds_dicts[task_id][0]['heatmap'] --> torch.Tensor (N,K,H,W)
             img_metas (list[dict]): Point cloud and image's meta info.
 
         Returns:
             list[dict]: Decoded bbox, scores and labels after nms.
         """
-        rets = []  # One 'rets' entry per class
+        rets = []
         for task_id, preds_dict in enumerate(preds_dicts):
             num_class_with_bg = self.num_classes[task_id]
             batch_size = preds_dict[0]['heatmap'].shape[0]
@@ -352,33 +355,23 @@ class CenterHeadWeakSupRP(CenterHead):
 
             batch_reg = preds_dict[0]['reg']
 
-            N = batch_heatmap.shape[0]  # TODO find meaning
-            H, W = batch_heatmap.shape[-2:]
-            RP_SIZE = 4.  # [m]
-            dummy_rots = torch.zeros(N, 1, H, W)
-            dummy_rotc = torch.zeros(N, 1, H, W)
-            dummy_hei = 0.5 * RP_SIZE * torch.ones(N, 1, H, W)
-            dummy_dim = RP_SIZE * torch.ones(N, 3, H, W)
-            dummy_vel = None
+            N, _, H, W = batch_reg.shape
+            device = batch_reg.device
+            batch_rots_dummy = torch.zeros((N, 1, H, W)).to(device)
+            batch_rotc_dummy = torch.zeros((N, 1, H, W)).to(device)
+            batch_hei_dummy = torch.zeros((N, 1, H, W)).to(device)
+            batch_dim_dummy = 5 * torch.ones((N, 3, H, W)).to(device)
+            batch_vel_dummy = None
 
-            # temp: Single element list with [dict]
-            # Keys:
-            #   'bboxes' --> torch.Tensor dim (#obj N, 7)
-            #   'scores' --> torch.Tensor dim (#obj N)
-            #   'labels' --> torch.Tensor dim (#obj N)
-            #
-            # Function decode() requires all inputs
-            # ==> Replace with dummy tensors
             temp = self.bbox_coder.decode(
-                batch_heatmap,  # (1,1,200,176)
-                dummy_rots,  # (1,1,200,176)
-                dummy_rotc,  # (1,1,200,176)
-                dummy_hei,  # (1,1,200,176)
-                dummy_dim,  # (1,3,200,176)
-                dummy_vel,  # (1,2,200,176)
-                reg=batch_reg,  # (1,2,200,176)
+                batch_heatmap,
+                batch_rots_dummy,
+                batch_rotc_dummy,
+                batch_hei_dummy,
+                batch_dim_dummy,
+                batch_vel_dummy,
+                reg=batch_reg,
                 task_id=task_id)
-
             assert self.test_cfg['nms_type'] in ['circle', 'rotate']
             batch_reg_preds = [box['bboxes'] for box in temp]
             batch_cls_preds = [box['scores'] for box in temp]
@@ -411,15 +404,15 @@ class CenterHeadWeakSupRP(CenterHead):
                                              batch_cls_preds, batch_reg_preds,
                                              batch_cls_labels, img_metas))
 
-        # Merge branches results
-        num_samples = len(rets[0])  # TODO find meaning
+        # Merge branches results1
+        num_samples = len(rets[0])
 
         ret_list = []
         for i in range(num_samples):
             for k in rets[0][i].keys():
                 if k == 'bboxes':
-                    # Concatenate bbox row-vectors of all classes (N, 7)
-                    bboxes = torch.cat([ret[i]['bboxes'] for ret in rets])
+                    bboxes = torch.cat([ret[i][k] for ret in rets])
+                    bboxes[:, 2] = bboxes[:, 2] - bboxes[:, 5] * 0.5
                     bboxes = img_metas[i]['box_type_3d'](
                         bboxes, self.bbox_coder.code_size)
                 elif k == 'scores':
@@ -431,5 +424,4 @@ class CenterHeadWeakSupRP(CenterHead):
                         flag += num_class
                     labels = torch.cat([ret[i][k].int() for ret in rets])
             ret_list.append([bboxes, scores, labels])
-
         return ret_list
