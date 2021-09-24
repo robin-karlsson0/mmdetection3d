@@ -1,6 +1,6 @@
 voxel_size = [0.05, 0.05, 0.1]
 model = dict(
-    type='CenterPoint',
+    type='CenterPointWeakSupRP',
     pts_voxel_layer=dict(
         max_num_points=5, voxel_size=voxel_size, max_voxels=(16000, 40000)),
     pts_voxel_encoder=dict(type='HardSimpleVFE', num_features=4),
@@ -32,14 +32,16 @@ model = dict(
         upsample_cfg=dict(type='deconv', bias=False),
         use_conv_for_no_stride=True),
     pts_bbox_head=dict(
-        type='CenterHead',
+        type='CenterHeadWeakSupRP',
         in_channels=sum([256, 256]),
         tasks=[
             dict(num_class=1, class_names=['Car']),
-            dict(num_class=1, class_names=['Pedestrian']),
-            dict(num_class=1, class_names=['Cyclist']),
+            # dict(num_class=1, class_names=['Pedestrian']),
+            # dict(num_class=1, class_names=['Cyclist']),
         ],
-        common_heads=dict(reg=(2, 2), height=(1, 2), dim=(3, 2), rot=(2, 2)),
+        # common_heads=dict(reg=(2, 2), height=(1, 2), dim=(3, 2), rot=(2, 2)),
+        # First number: #outputs, second number: #convolutions
+        common_heads=dict(reg=(2, 2)),
         share_conv_channel=64,
         bbox_coder=dict(
             type='CenterPointBBoxCoder',
@@ -62,9 +64,9 @@ model = dict(
             voxel_size=voxel_size,
             out_size_factor=8,
             dense_reg=1,
-            gaussian_overlap=0.1,
+            gaussian_overlap=0.1,  # elements in feature map coords [feat]
             max_objs=500,
-            min_radius=2,
+            min_radius=4,  # 2,  # elements in feature map coords [feat]
             code_weights=[1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0])),
     test_cfg=dict(
         pts=dict(
